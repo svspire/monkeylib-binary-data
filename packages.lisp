@@ -3,7 +3,7 @@
 ;;
 
 (in-package :cl-user)
-
+(declaim (optimize (debug 3)))
 (defpackage :com.gigamonkeys.binary-data
   (:use :common-lisp :alexandria)
   (:nicknames :binary-data)
@@ -36,5 +36,9 @@
    :ucs-2-char-little-endian 
    :ucs-2-char-type 
    :ucs-2-string 
-   :ucs-2-terminated-string 
+   :ucs-2-terminated-string
+   :utf-8-string
+   :utf-8-terminated-string
+   :utf-16BE-string
+   :utf-16BE-terminated-string
    :unsigned-integer))

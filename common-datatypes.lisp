@@ -21,10 +21,35 @@
 
 ;;; Strings
 
+(defun make-ram-input-stream (buffer &optional (character-format :utf-8))
+  "Make a bivalent input stream in RAM"
+  #+CCL (ccl::make-vector-input-stream buffer :external-format character-format)
+  #-CCL nil)
+
+(define-binary-type utf-8-string (length)
+  (:reader (in) 
+           (let* ((buffer (make-array length :element-type '(UNSIGNED-BYTE 8)))
+                  (ram-stream nil)
+                  (ch nil))
+             (read-sequence buffer in)
+             ; need bivalence for this. Make a bivalent ram buffer and read chars from that.
+             (setf ram-stream (make-ram-input-stream buffer :utf-8))
+             (with-output-to-string (s)
+               (loop while (setf ch (read-char ram-stream nil nil nil)) do
+                 (write-char ch s)))))
+  (:writer (out string)
+           (let* ((initial-stream-pos (file-position out))
+                  (final-stream-pos (+ initial-stream-pos length))
+                  (index 0))
+             (loop while (< (file-position out) final-stream-pos) do
+               (write-char (char string index) out)
+               (incf index)))))
+
 (define-binary-type generic-string (length character-type)
   (:reader (in)
     (let ((string (make-string length)))
       (dotimes (i length)
+        ;(print string)
         (setf (char string i) (read-value character-type in)))
       string))
   (:writer (out string)
@@ -34,6 +59,7 @@
 (define-binary-type generic-terminated-string (terminator character-type)
   (:reader (in)
     (with-output-to-string (s)
+      ;(break)
       (loop for char = (read-value character-type in)
             until (char= char terminator) do (write-char char s))))
   (:writer (out string)
@@ -74,6 +100,7 @@
   (:reader (in)
     (let ((code (read-value 'u2 in)))
       (when swap (setf code (swap-bytes code)))
+      ;(break)
       (or (code-char code) (error "Character code ~d not supported" code))))
   (:writer (out char)
     (let ((code (char-code char)))
@@ -114,11 +141,13 @@
 
 (define-binary-type ucs-2-terminated-string (terminator)
   (:reader (in)
-    (let ((byte-order-mark (read-value 'u2 in)))
-      (read-value
-       'generic-terminated-string in
-       :terminator terminator
-       :character-type (ucs-2-char-type byte-order-mark))))
+           (let ((byte-order-mark (read-value 'u2 in)))
+             (if (zerop byte-order-mark) ; BOM = 0 means "this string doesn't exist". This actually occurs sometimes.
+                 ""
+                 (read-value
+                  'generic-terminated-string in
+                  :terminator terminator
+                  :character-type (ucs-2-char-type byte-order-mark)))))
   (:writer (out string)
     (write-value 'u2 out #xfeff)
     (write-value 
